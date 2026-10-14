@@ -1,0 +1,15 @@
+item,description
+weekly_surveillance,Main Kobo form: one district weekly meningitis report (IDSR style).
+cases,Kobo repeat group: one row per suspected case. Join cases._parent_index = weekly_surveillance._index.
+districts,"Lookup: district, region, map coordinates, population, MenFive campaign flag."
+forecast,16-week ahead forecast per district from the prediction model.
+model_performance,Accuracy of the outbreak prediction model on training (2023-2025) and test (2026) data.
+model_coefficients,Logistic regression coefficients (standardised features) and odds ratios.
+attack_rate_per_100k,"Suspected cases / population x 100,000 for the week."
+threshold_status,"WHO thresholds: Alert >= 3 per 100k per week, Epidemic >= 10 per 100k per week."
+dust_aod_index,Aerosol optical depth proxy for Harmattan dust (higher = dustier).
+predicted_outbreak_prob,Model probability that the district crosses the Alert threshold in the next 2 weeks.
+predicted_risk_level,"Low < 0.15, Moderate 0.15-0.40, High 0.40-0.70, Very high >= 0.70."
+alert_next_2wks,What actually happened: yes if Alert threshold was crossed in either of the next 2 weeks.
+model_split,Train = data used to fit the model; Test = 2026 data the model never saw.
+DISCLAIMER,All data are FICTITIOUS and simulated for training purposes. Not real surveillance data.

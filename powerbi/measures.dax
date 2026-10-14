@@ -1,0 +1,117 @@
+// =====================================================================
+// DAX measures for the Meningitis Outbreak Prediction dashboard
+// Create a table to hold them: Home → Enter data → name it "_Measures" → Load.
+// Then: select _Measures → New measure → paste one measure at a time.
+// =====================================================================
+
+// ---------- Date table (Modeling → New table) ----------
+Calendar =
+ADDCOLUMNS (
+    CALENDAR ( DATE ( 2023, 1, 1 ), DATE ( 2027, 3, 31 ) ),
+    "Year", YEAR ( [Date] ),
+    "Month", FORMAT ( [Date], "MMM" ),
+    "Month No", MONTH ( [Date] ),
+    "Year-Month", FORMAT ( [Date], "YYYY-MM" ),
+    "Season", IF ( MONTH ( [Date] ) IN { 11, 12, 1, 2, 3, 4 }, "Dry season", "Rainy season" )
+)
+
+// ---------- Burden ----------
+Suspected Cases = SUM ( weekly_surveillance[suspected_cases] )
+Confirmed Cases = SUM ( weekly_surveillance[confirmed_cases] )
+Deaths = SUM ( weekly_surveillance[deaths] )
+CSF Samples = SUM ( weekly_surveillance[csf_samples_collected] )
+
+Case Fatality Rate % = DIVIDE ( [Deaths], [Suspected Cases] )
+CSF Collection Rate % = DIVIDE ( [CSF Samples], [Suspected Cases] )
+Lab Positivity % = DIVIDE ( [Confirmed Cases], [CSF Samples] )
+
+Population =
+SUMX (
+    VALUES ( weekly_surveillance[district] ),
+    CALCULATE ( MAX ( weekly_surveillance[population] ) )
+)
+
+Weeks in View = DISTINCTCOUNT ( weekly_surveillance[week_start_date] )
+
+Attack Rate per 100k (cumulative) = DIVIDE ( [Suspected Cases], [Population] ) * 100000
+Weekly Attack Rate per 100k = DIVIDE ( [Attack Rate per 100k (cumulative)], [Weeks in View] )
+
+// ---------- Thresholds ----------
+Alert Threshold = 3
+Epidemic Threshold = 10
+
+Districts in Alert =
+CALCULATE ( DISTINCTCOUNT ( weekly_surveillance[district] ), weekly_surveillance[threshold_status] = "Alert" )
+
+Districts in Epidemic =
+CALCULATE ( DISTINCTCOUNT ( weekly_surveillance[district] ), weekly_surveillance[threshold_status] = "Epidemic" )
+
+Epidemic District-Weeks =
+CALCULATE ( COUNTROWS ( weekly_surveillance ), weekly_surveillance[threshold_status] = "Epidemic" )
+
+// ---------- Latest week (headline cards) ----------
+Latest Week = MAX ( weekly_surveillance[week_start_date] )
+
+Cases Latest Week =
+VAR lw = [Latest Week]
+RETURN CALCULATE ( [Suspected Cases], weekly_surveillance[week_start_date] = lw )
+
+Cases Previous Week =
+VAR lw = [Latest Week]
+RETURN CALCULATE ( [Suspected Cases], weekly_surveillance[week_start_date] = lw - 7 )
+
+Week-on-Week Change % = DIVIDE ( [Cases Latest Week] - [Cases Previous Week], [Cases Previous Week] )
+
+// ---------- Prediction ----------
+Avg Outbreak Probability = AVERAGE ( weekly_surveillance[predicted_outbreak_prob] )
+
+Districts High Risk Now =
+VAR lw = [Latest Week]
+RETURN
+    CALCULATE (
+        DISTINCTCOUNT ( weekly_surveillance[district] ),
+        weekly_surveillance[week_start_date] = lw,
+        weekly_surveillance[predicted_risk_level] IN { "High", "Very high" }
+    )
+
+Forecast Cases (next 16 wks) = SUM ( forecast[expected_cases] )
+Forecast Peak Probability = MAX ( forecast[predicted_outbreak_prob] )
+
+Districts High Risk in Forecast =
+CALCULATE (
+    DISTINCTCOUNT ( forecast[district] ),
+    forecast[predicted_risk_level] IN { "High", "Very high" }
+)
+
+// Model accuracy on 2026 test data (use a slicer or the filter pane on model_split)
+Model Hits =
+CALCULATE (
+    COUNTROWS ( weekly_surveillance ),
+    weekly_surveillance[predicted_outbreak_prob] >= 0.40,
+    weekly_surveillance[alert_next_2wks] = "yes"
+)
+Observed Alerts = CALCULATE ( COUNTROWS ( weekly_surveillance ), weekly_surveillance[alert_next_2wks] = "yes" )
+Sensitivity % = DIVIDE ( [Model Hits], [Observed Alerts] )
+
+// ---------- Case profile (from the line list) ----------
+Cases (line list) = COUNTROWS ( cases )
+Vaccinated % = DIVIDE ( CALCULATE ( [Cases (line list)], LEFT ( cases[vaccination_status], 3 ) = "Yes" ), [Cases (line list)] )
+Avg Days Onset to Admission = AVERAGE ( cases[days_onset_to_admission] )
+
+// ---------- Surveillance performance ----------
+Reporting Completeness % = AVERAGE ( weekly_surveillance[reporting_completeness_pct] ) / 100
+Timeliness % =
+DIVIDE (
+    CALCULATE ( COUNTROWS ( weekly_surveillance ), weekly_surveillance[report_on_time] = "yes" ),
+    COUNTROWS ( weekly_surveillance )
+)
+
+// ---------- Conditional-format colour for risk ----------
+Risk Colour =
+SWITCH (
+    SELECTEDVALUE ( weekly_surveillance[predicted_risk_level] ),
+    "Very high", "#B2182B",
+    "High", "#EF8A62",
+    "Moderate", "#FDDBC7",
+    "#D1E5F0"
+)
